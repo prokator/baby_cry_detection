@@ -1,97 +1,140 @@
-# Baby cry detection - Building the model
-### Recognition of baby cry from audio signals
+# Baby Cry Detection - Updated Project Overview
 
-The aim is to automatically recognize a baby crying while sleeping. In such case, a lullaby is played to calm the baby
-down.
+## Original Project
 
-This is done by implementing a machine learning algorithm on a Raspberry Pi. The idea is to train a model on a computer
-and to deploy it on Raspberry Pi, which is used to record a signal and use the model to predict if it is a baby cry or
-not. In the former case a lullaby is played, in the latter the process (recording and predicting steps) starts again.
+This repository is a fork/extension of the original baby-cry detection project focused on model training on PC and prediction flow for Raspberry Pi.
 
-### Code organisation
+The original README is preserved as [`ORIGINAL_README.md`](ORIGINAL_README.md).
 
-The code is organised as follows.
+## Why This Fork Exists
 
-- `./baby_cry_detection/pc_main` and `./baby_cry_detection/pc_methods` folders: to run on a computer, they implement the training part
-- `./baby_cry_detection/rpi_main` and `./baby_cry_detection/rpi_methods` folders: to run on a Raspberry Pi, they implement the predicting part
+The fork was created to turn the original research/prototype code into an operational, on-demand monitoring system for real home use:
 
+- run fully in Docker on Windows + WSL environments
+- reduce false positives with multi-stage verification
+- send actionable Telegram alerts with audio clips
+- support practical calibration and service lifecycle control from scripts/commands
 
-##### TRAINING
+This new README describes what has been added on top of the original codebase.
 
-It includes all the steps required to train a machine learning model. First, it reads the data, it performs feature
-engineering and it trains the model.
+## What Changed From Original Version
 
-The model is saved to be used in the prediction step. The _training step_ is performed
-on a powerful machine, such as a personal computer.
+- Added a Docker-first real-time monitoring stack.
+- Added Telegram alerting with text + audio clip delivery.
+- Added anti-false-positive detection flow with a two-stage pipeline:
+  - phase 1: existing model/gating
+  - phase 2: verifier/suppression layer (YAMNet-based path)
+- Added runtime calibration controls from Telegram commands.
+- Added service lifecycle scripts for manual start/stop operation.
+- Added richer monitor-oriented tests and operational docs.
 
-Code to run this part is included in `pc_main` and `pc_methods`.
+## Current Architecture
 
-##### PREDICTION
+- `monitor` service: continuous audio listening and detection loop.
+- `monitor-api` service: API endpoints + Telegram bot polling commands.
+- Shared `artifacts/` volume: stores trigger clips, event metadata, and calibration state files used by both services.
 
-It includes all the steps needed to make a prediction on a new signal. It reads a new signal (9 second long), it cuts
-it into 5 overlapping signals (5 second long), it applies the pipeline saved from the training step to make a
-prediction.
+## Major Additions
 
-The _prediction_ step is performed on a Raspberry Pi 2B. Please check
-[baby_cry_rpi](https://github.com/giulbia/baby_cry_rpi.git) for deployment on Raspberry Pi.
+### 1) Docker + Compose Runtime
 
-Code to run this part is included in `rpi_main` and `rpi_methods`.
+- `Dockerfile`
+- `docker-compose.yml`
+- `start_service.bat` / `stop_service.bat`
+- Pulse bridge helper scripts for Docker-on-Windows + WSL microphone access:
+  - `refresh_pulse_bridge.bat`
+  - `list_mics.bat`
 
-##### SIMULATION
+### 2) Monitor Package
 
-There is a script to test the prediction step on your computer before deployment on Raspberry Pi.
+New/extended monitor modules under `baby_cry_detection/monitor/`:
 
-A script `prediction_simulation.py` and 2 audio signals are provided in folder `./baby_cry_detection/prediction_simulation`.
+- `cli.py` - live monitor loop and command entrypoint.
+- `api.py` - FastAPI app + Telegram poller wiring.
+- `audio.py` - resilient audio capture (PortAudio + Pulse fallback).
+- `service.py`, `gating.py`, `decision.py` - detection and gating logic.
+- `notifier.py`, `recipient_store.py`, `telegram_poller.py` - Telegram messaging and command processing.
+- `calibration.py` - shared calibration control/status and command help utilities.
+- `backends/*` - primary/verifier backend abstractions and implementations.
 
-### Run
+### 3) Telegram Bot Commands
 
-To make it run properly, clone this repo in a folder. In the same parent folder you should also create the following
-tree structure:
-* PARENT FOLDER
-  * baby_cry_detection *this cloned repo*
-  * output
-    * dataset
-    * model
-    * prediction
-  * recording
+Core commands:
 
-From your command line go to baby_cry_detection folder and run the following python scripts.
+- `/start`
+- `/status`
+- `/test`
 
-##### TRAINING
+Calibration commands:
 
-This step allows you to train the model. Please note that the model itself is not provided.
+- `/cal`
+- `/cal_start phase1 [interval_sec]`
+- `/cal_start phase2 [interval_sec]`
+- `/cal_set <param> <value>`
+- `/cal_params`
+- `/cal_status`
+- `/cal_watch [interval_sec]`
+- `/cal_watch_stop`
+- `/cal_stop`
 
+Calibration behavior:
+
+- Alerts are suppressed while calibration is active.
+- Periodic detection snapshots are produced for tuning.
+- On `/cal_stop`, runtime returns to `.env` defaults and alerts are re-enabled.
+
+### 4) Configuration
+
+Use `.env.example` as the template for local `.env`.
+
+Important categories:
+
+- Telegram: token/chat/poller/test controls
+- Audio: sample rate, device, pulse settings, mic gain
+- Detection thresholds: phase1 + phase2 tuning parameters
+- Runtime: cooldown, artifact path, backend toggles, logging
+
+## Quick Start (Updated Stack)
+
+1. Copy `.env.example` to `.env` and fill required values (especially Telegram token/chat).
+2. Build image:
+
+```bash
+docker build -t baby-cry-monitor .
 ```
-# Create and save trainset
-python baby_cry_detection/pc_main/train_set.py
-```
-```
-# Train and save model
-python baby_cry_detection/pc_main/train_model.py
-```
 
-Script `train_set.py` saves the trainset in folder _dataset_ and, script `train_model.py` saves the model in folder
- _model_. Folders _dataset_ and _model_ are parameters with default values that fits with the organisation shown
- above, they can be changed as wished.
+3. Start full stack:
 
-##### PREDICTION
-
-This step is to be executed on Raspberry Pi. Please refer to [baby_cry_rpi](https://github.com/giulbia/baby_cry_rpi.git)
-
-##### SIMULATION
-
-This step allows you to test the model on your computer. It uses scripts from `rpi_methods` folder.
-
-```
-python baby_cry_detection/prediction_simulation/prediction_simulation.py
+```bat
+start_service.bat
 ```
 
-### Logs
+4. Stop full stack:
 
-Log files are created for each step, they are saved in folder `baby_cry_detection`.
+```bat
+stop_service.bat
+```
 
+## API Endpoints (monitor-api)
 
+- `GET /health`
+- `POST /classify`
+- `POST /telegram/start`
+- `POST /telegram/webhook`
 
+## Test Coverage Added
 
->Part of the data used for training comes from
-[ESC-50: Dataset for environmental sound classification](https://github.com/karoldvl/ESC-50)
+Monitor-focused tests now include:
+
+- config parsing
+- gating behavior
+- notifier behavior
+- CLI logic
+- Telegram poller commands
+- calibration state and command behavior
+- backend integration checks
+
+## Notes
+
+- The original training/prediction project structure is still present.
+- This update layers an operational monitoring system on top of the original repository.

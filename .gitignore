@@ -77,6 +77,8 @@ celerybeat-schedule
 
 # dotenv
 .env
+.env.*
+!.env.example
 
 # virtualenv
 venv/
@@ -94,3 +96,14 @@ ENV/
 
 # Other files proper to this project
 expand_train_set.py
+
+# Local operational/runtime files
+artifacts/
+.ai/
+.telegram_start_code
+.telegram_user_id
+
+# Agent/dev session files
+AGENTS.md
+stdhuman.md
+current_status.md

@@ -1,0 +1,36 @@
+services:
+  monitor:
+    build: .
+    image: baby-cry-monitor:latest
+    env_file:
+      - .env
+    volumes:
+      - ./artifacts:/app/artifacts
+    command: ["start"]
+    restart: "no"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  monitor-api:
+    build: .
+    image: baby-cry-monitor:latest
+    env_file:
+      - .env
+    volumes:
+      - ./artifacts:/app/artifacts
+    ports:
+      - "8080:8080"
+    entrypoint: ["python", "-m", "baby_cry_detection.monitor.api"]
+    restart: "no"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
